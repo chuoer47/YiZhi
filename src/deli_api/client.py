@@ -64,8 +64,16 @@ class DeliLegalClient:
         self.close()
 
     @classmethod
-    def from_env(cls, dotenv_path: str | None = None) -> "DeliLegalClient":
-        load_dotenv(dotenv_path=dotenv_path)
+    def from_env(
+        cls,
+        dotenv_path: str | os.PathLike[str] | None = None,
+        *,
+        override: bool = False,
+    ) -> "DeliLegalClient":
+        resolved_dotenv_path = (
+            os.fspath(dotenv_path) if dotenv_path is not None else None
+        )
+        load_dotenv(dotenv_path=resolved_dotenv_path, override=override)
         app_id = os.getenv("DELILEGAL_APP_ID")
         secret = os.getenv("DELILEGAL_SECRET")
         base_url = os.getenv("DELILEGAL_BASE_URL", "https://openapi.delilegal.com")
@@ -344,6 +352,15 @@ class DeliLegalClient:
             metadata=metadata,
             raw=item,
         )
+
+
+def init_case_client(
+    dotenv_path: str | os.PathLike[str] | None = None,
+    *,
+    override: bool = False,
+) -> DeliLegalClient:
+    """One-line factory for creating a DeliLegal client from env vars."""
+    return DeliLegalClient.from_env(dotenv_path=dotenv_path, override=override)
 
 
 def _find_records(payload: Any) -> tuple[bool, list[Any]]:

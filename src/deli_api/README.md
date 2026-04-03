@@ -68,6 +68,18 @@ Copy-Item .env.example .env
 示例：
 
 ```python
+from deli_api import init_case_client
+
+with init_case_client(".env") as client:
+    case_hits = client.search_cases(
+        query="上班途中车祸工伤案例",
+        page_size=3,
+    )
+```
+
+如需类方法写法，仍可使用：
+
+```python
 from deli_api import DeliLegalClient
 
 with DeliLegalClient.from_env(".env") as client:

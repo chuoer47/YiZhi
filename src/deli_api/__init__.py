@@ -1,4 +1,4 @@
-from deli_api.client import DeliLegalClient
+from deli_api.client import DeliLegalClient, init_case_client
 from deli_api.exceptions import (
     DeliLegalAPIError,
     DeliLegalAuthenticationError,
@@ -37,4 +37,5 @@ __all__ = [
     "create_legal_search_tools",
     "create_search_cases_tool",
     "create_search_laws_tool",
+    "init_case_client",
 ]
