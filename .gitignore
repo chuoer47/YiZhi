@@ -8,4 +8,4 @@ dist/
 *.egg-info/
 .vscode
 .idea
-
+outputs/*.xlsx
