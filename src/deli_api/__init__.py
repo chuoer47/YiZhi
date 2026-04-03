@@ -11,7 +11,7 @@ from deli_api.exceptions import (
     DeliLegalUpstreamError,
 )
 from deli_api.retrievers import CaseRetriever, LawRetriever
-from deli_api.schemas import CaseSearchParams, LawSearchParams, LegalHit
+from deli_api.schemas import CaseHit, CaseSearchParams, LawHit, LawSearchParams, LegalHit
 from deli_api.tools import (
     create_legal_search_tools,
     create_search_cases_tool,
@@ -21,6 +21,7 @@ from deli_api.tools import (
 __all__ = [
     "CaseRetriever",
     "CaseSearchParams",
+    "CaseHit",
     "DeliLegalAPIError",
     "DeliLegalAuthenticationError",
     "DeliLegalClient",
@@ -32,6 +33,7 @@ __all__ = [
     "DeliLegalResponseFormatError",
     "DeliLegalUpstreamError",
     "LawRetriever",
+    "LawHit",
     "LawSearchParams",
     "LegalHit",
     "create_legal_search_tools",

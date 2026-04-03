@@ -171,26 +171,27 @@ with DeliLegalClient.from_env(".env") as client:
 
 # 6. 返回数据模型
 
-`search_laws` 和 `search_cases` 方法均返回 `list[LegalHit]`（LegalHit 对象列表）。
+`search_laws` 返回 `list[LawHit]`，`search_cases` 返回 `list[CaseHit]`。
+两者都是强类型数据类（Pydantic 模型），便于直接访问字段。
 
-LegalHit 的主要字段：
-
-- `source_type`（来源类型）
+CaseHit 主要字段：
 
 - `title`（标题）
-
 - `content`（内容）
+- `case_no`（案号）
+- `court_name`（法院）
+- `cause`（案由）
+- `case_date`（裁判日期）
+- `raw`（原始数据）
 
-- `score`（得分）
+LawHit 主要字段：
 
-- `source_id`（来源ID）
-
-- `citation`（引用信息）
-
-- `url`（链接）
-
-- `metadata`（元数据）
-
+- `title`（标题）
+- `content`（内容）
+- `law_name`（法规名称）
+- `article_no`（文号/条号）
+- `publish_date`（发布日期）
+- `active_date`（生效日期）
 - `raw`（原始数据）
 
 若需要 LangChain 的 `Document` 对象，可调用：

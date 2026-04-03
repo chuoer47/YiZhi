@@ -17,10 +17,10 @@ from deli_api.exceptions import (
     DeliLegalResponseFormatError,
     DeliLegalUpstreamError,
 )
-from deli_api.schemas import LegalHit
+from deli_api.schemas import CaseHit, LawHit
 
 
-SUCCESS_CODES = {0, 200, "0", "200", "success", "SUCCESS"}
+SUCCESS_CODES = {0, "0", 200, "200", "success", "SUCCESS"}
 AUTH_ERROR_CODES = {401, 403, "401", "403"}
 AUTH_ERROR_TOKENS = (
     "appid",
@@ -34,6 +34,10 @@ AUTH_ERROR_TOKENS = (
 
 
 class DeliLegalClient:
+    """Thin client for fixed Deli API response template:
+    {success, code, msg, body: {data, queryId, totalPage, totalCount}}
+    """
+
     def __init__(
         self,
         app_id: str,
@@ -70,18 +74,18 @@ class DeliLegalClient:
         *,
         override: bool = False,
     ) -> "DeliLegalClient":
-        resolved_dotenv_path = (
-            os.fspath(dotenv_path) if dotenv_path is not None else None
+        load_dotenv(
+            dotenv_path=os.fspath(dotenv_path) if dotenv_path is not None else None,
+            override=override,
         )
-        load_dotenv(dotenv_path=resolved_dotenv_path, override=override)
         app_id = os.getenv("DELILEGAL_APP_ID")
         secret = os.getenv("DELILEGAL_SECRET")
         base_url = os.getenv("DELILEGAL_BASE_URL", "https://openapi.delilegal.com")
         timeout = float(os.getenv("DELILEGAL_TIMEOUT", "30"))
 
         missing = [
-            name
-            for name, value in (
+            key
+            for key, value in (
                 ("DELILEGAL_APP_ID", app_id),
                 ("DELILEGAL_SECRET", secret),
             )
@@ -113,23 +117,21 @@ class DeliLegalClient:
         active_year_end: str | None = None,
         field_name: str = "semantic",
         extra_condition: Mapping[str, Any] | None = None,
-    ) -> list[LegalHit]:
+    ) -> list[LawHit]:
         condition: dict[str, Any] = {
             "keywords": [query],
             "fieldName": field_name,
         }
         if time_liness_type_arr:
             condition["timeLinessTypeArr"] = list(time_liness_type_arr)
-        condition.update(
-            _drop_none(
-                {
-                    "publishYearStart": publish_year_start,
-                    "publishYearEnd": publish_year_end,
-                    "activeYearStart": active_year_start,
-                    "activeYearEnd": active_year_end,
-                }
-            )
-        )
+        if publish_year_start is not None:
+            condition["publishYearStart"] = publish_year_start
+        if publish_year_end is not None:
+            condition["publishYearEnd"] = publish_year_end
+        if active_year_start is not None:
+            condition["activeYearStart"] = active_year_start
+        if active_year_end is not None:
+            condition["activeYearEnd"] = active_year_end
         if extra_condition:
             condition.update(extra_condition)
 
@@ -155,20 +157,14 @@ class DeliLegalClient:
         case_year_end: str | None = None,
         court_level_arr: Sequence[str] | None = None,
         extra_condition: Mapping[str, Any] | None = None,
-    ) -> list[LegalHit]:
-        condition: dict[str, Any] = {
-            "keywordArr": [query],
-        }
+    ) -> list[CaseHit]:
+        condition: dict[str, Any] = {"keywordArr": [query]}
+        if case_year_start is not None:
+            condition["caseYearStart"] = case_year_start
+        if case_year_end is not None:
+            condition["caseYearEnd"] = case_year_end
         if court_level_arr:
             condition["courtLevelArr"] = list(court_level_arr)
-        condition.update(
-            _drop_none(
-                {
-                    "caseYearStart": case_year_start,
-                    "caseYearEnd": case_year_end,
-                }
-            )
-        )
         if extra_condition:
             condition.update(extra_condition)
 
@@ -217,13 +213,27 @@ class DeliLegalClient:
 
         self._raise_for_api_error(data, path=path, payload=payload)
 
-        found, items = _find_records(data)
-        if not found:
+        if not isinstance(data, dict):
             raise DeliLegalResponseFormatError(
-                "Unable to locate a result list in upstream payload.",
+                "Unexpected response format: expected top-level object.",
                 path=path,
                 payload=payload,
-                details={"top_level_keys": list(data.keys()) if isinstance(data, dict) else []},
+                response_text=_truncate_text(json.dumps(data, ensure_ascii=False)),
+            )
+        body = data.get("body")
+        if not isinstance(body, dict):
+            raise DeliLegalResponseFormatError(
+                "Unexpected response format: expected body object.",
+                path=path,
+                payload=payload,
+                response_text=_truncate_text(json.dumps(data, ensure_ascii=False)),
+            )
+        items = body.get("data")
+        if not isinstance(items, list):
+            raise DeliLegalResponseFormatError(
+                "Unexpected response format: expected body.data list.",
+                path=path,
+                payload=payload,
                 response_text=_truncate_text(json.dumps(data, ensure_ascii=False)),
             )
 
@@ -242,11 +252,14 @@ class DeliLegalClient:
         success = response_payload.get("success")
         code = response_payload.get("code")
         message = str(
-            response_payload.get("message")
-            or response_payload.get("msg")
+            response_payload.get("msg")
+            or response_payload.get("message")
             or "Unknown upstream error."
         )
 
+        # Known success template: success=True and code in {0, 200, ...}
+        if success is True and code in SUCCESS_CODES:
+            return
         if success is False or (code is not None and code not in SUCCESS_CODES):
             error_cls = (
                 DeliLegalAuthenticationError
@@ -258,98 +271,58 @@ class DeliLegalClient:
                 code=code,
                 path=path,
                 payload=payload,
-                details=_drop_none(
-                    {
-                        "success": success,
-                        "query_id": _extract_query_id(response_payload),
-                    }
-                ),
+                details={
+                    "success": success,
+                    "query_id": _extract_query_id(response_payload),
+                },
                 response_text=_truncate_text(json.dumps(response_payload, ensure_ascii=False)),
             )
 
-    def _normalize_law_hit(self, item: dict[str, Any]) -> LegalHit:
-        law_name = _first_str(item, "lawName", "title", "name", "documentName")
-        article_no = _first_str(item, "articleNo", "articleNum", "clauseNo", "article")
-        title = law_name or _first_str(item, "title", "name") or "Untitled law"
-        content = _first_str(
-            item,
-            "content",
-            "articleContent",
-            "summary",
-            "snippet",
-            "text",
-            "abstract",
-        )
-        citation = _build_law_citation(law_name, article_no) or title
-        metadata = _drop_none(
-            {
-                "law_name": law_name,
-                "article_no": article_no,
-                "publisher_name": _first_str(item, "publisherName", "publisher"),
-                "level_name": _first_str(item, "levelName", "level"),
-                "publish_date": _first_str(item, "publishDate", "publishTime", "publishYear"),
-                "active_date": _first_str(item, "activeDate", "activeTime", "effectiveDate"),
-                "timeliness_type": _first_str(
-                    item,
-                    "timelinessName",
-                    "timeLinessType",
-                    "timelinessType",
-                ),
-            }
-        )
-        return LegalHit(
-            source_type="law",
+    def _normalize_law_hit(self, item: dict[str, Any]) -> LawHit:
+        title = _to_str(item.get("title")) or "Untitled law"
+        issued_no = _to_str(item.get("issuedNo"))
+        content = _to_str(item.get("content")) or title
+        citation = f"{title}{issued_no}" if issued_no else title
+
+        return LawHit(
             title=title,
-            content=content or title,
-            score=_first_float(item, "score", "correlation", "similarity"),
-            source_id=_first_str(item, "id", "lawId", "documentId", "docId"),
+            content=content,
+            score=_to_float(item.get("score")),
+            source_id=_to_str(item.get("id")),
             citation=citation,
-            url=_first_str(item, "url", "link", "detailUrl"),
-            metadata=metadata,
+            url=_to_str(item.get("url")),
+            law_name=title,
+            article_no=issued_no,
+            publisher_name=_to_str(item.get("publisherName")),
+            level_name=_to_str(item.get("levelName")),
+            publish_date=_to_str(item.get("publishDate")),
+            active_date=_to_str(item.get("activeDate")),
+            timeliness_type=_to_str(item.get("timelinessName")),
             raw=item,
         )
 
-    def _normalize_case_hit(self, item: dict[str, Any]) -> LegalHit:
-        case_no = _first_str(item, "caseNo", "caseNumber", "\u6848\u53f7")
-        title = _first_str(item, "title", "caseTitle", "name") or case_no or "Untitled case"
-        content = _first_str(
-            item,
-            "content",
-            "summary",
-            "snippet",
-            "text",
-            "judgmentReason",
-            "abstract",
-        )
-        court_name = _first_str(item, "courtName", "court", "courtFullName")
-        citation = case_no or title
-        metadata = _drop_none(
-            {
-                "case_no": case_no,
-                "court_name": court_name,
-                "case_type": _first_str(item, "caseType", "trialProcedure"),
-                "cause": _first_str(item, "cause", "caseCause"),
-                "case_date": _first_str(
-                    item,
-                    "caseDate",
-                    "judgementDate",
-                    "judgmentDate",
-                    "refereeDate",
-                ),
-                "level_of_trial": _first_str(item, "levelOfTrial"),
-                "judgement_type": _first_str(item, "judgementType", "judgmentType"),
-                "province": _first_str(item, "province"),
-            }
-        )
-        return LegalHit(
-            source_type="case",
+    def _normalize_case_hit(self, item: dict[str, Any]) -> CaseHit:
+        case_no = _to_str(item.get("caseNumber"))
+        title = _to_str(item.get("title")) or case_no or "Untitled case"
+        content = _to_str(item.get("content")) or title
+        court_name = _to_str(item.get("court"))
+
+        return CaseHit(
             title=title,
-            content=content or title,
-            score=_first_float(item, "score", "correlation", "similarity"),
-            source_id=_first_str(item, "id", "caseId", "documentId", "docId"),
-            citation=citation,
-            url=_first_str(item, "url", "link", "detailUrl"),
-            metadata=metadata,
+            content=content,
+            score=_to_float(item.get("score")),
+            source_id=_to_str(item.get("id")),
+            citation=case_no or title,
+            url=_to_str(item.get("url")),
+            case_no=case_no,
+            court_name=court_name,
+            case_type=_to_str(item.get("caseType")),
+            cause=_to_str(item.get("cause")),
+            case_date=_to_str(item.get("judgementDate")),
+            level_of_trial=_to_str(item.get("levelOfTrial")),
+            judgement_type=_to_str(item.get("judgementType")),
+            publish_type=_to_str(item.get("publishType")),
+            publish_type_name=_to_str(item.get("publishTypeName")),
             raw=item,
         )
 
@@ -363,65 +336,12 @@ def init_case_client(
     return DeliLegalClient.from_env(dotenv_path=dotenv_path, override=override)
 
 
-def _find_records(payload: Any) -> tuple[bool, list[Any]]:
-    if isinstance(payload, list):
-        return True, payload
-    if not isinstance(payload, dict):
-        return False, []
-
-    for key in ("list", "records", "rows", "items", "result", "results", "data", "body"):
-        if key in payload:
-            found, result = _find_records(payload[key])
-            if found:
-                return True, result
-
-    for value in payload.values():
-        if isinstance(value, list) and all(isinstance(item, dict) for item in value):
-            return True, value
-
-    return False, []
-
-
-def _first_str(payload: Mapping[str, Any], *keys: str) -> str | None:
-    value = _first_value(payload, *keys)
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def _first_float(payload: Mapping[str, Any], *keys: str) -> float | None:
-    value = _first_value(payload, *keys)
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _first_value(payload: Mapping[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in payload and payload[key] not in (None, ""):
-            return payload[key]
-    return None
-
-
-def _build_law_citation(law_name: str | None, article_no: str | None) -> str | None:
-    if law_name and article_no:
-        return f"{law_name}{article_no}"
-    return law_name or article_no
-
-
 def _extract_query_id(payload: Mapping[str, Any]) -> str | None:
-    for key in ("queryId", "query_id"):
-        value = _first_value(payload, key)
-        if value:
-            return str(value)
     body = payload.get("body")
     if isinstance(body, Mapping):
-        return _extract_query_id(body)
-    return None
+        query_id = body.get("queryId") or body.get("query_id")
+        return _to_str(query_id)
+    return _to_str(payload.get("queryId") or payload.get("query_id"))
 
 
 def _is_auth_error(*, code: Any, message: str) -> bool:
@@ -431,13 +351,25 @@ def _is_auth_error(*, code: Any, message: str) -> bool:
     return any(token in normalized for token in AUTH_ERROR_TOKENS)
 
 
+def _to_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _truncate_text(text: str | None, limit: int = 2000) -> str | None:
     if text is None:
         return None
     if len(text) <= limit:
         return text
     return f"{text[:limit]}...<truncated>"
-
-
-def _drop_none(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if value is not None}
