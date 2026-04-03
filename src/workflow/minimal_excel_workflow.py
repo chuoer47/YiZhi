@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import warnings
 from pathlib import Path
 from typing import Any
+
+# Allow direct run: python src/workflow/minimal_excel_workflow.py
+SRC_ROOT = Path(__file__).resolve().parents[1]
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from deli_api import CaseHit, init_case_client
 from dotenv import load_dotenv
@@ -19,6 +25,7 @@ from pydantic import BaseModel, Field
 # =========================
 QUERY = "上班途中车祸工伤案例"
 TARGET_CASE_COUNT = 50
+REWRITE_QUERY_COUNT = 3
 PAGE_SIZE = 5  # Deli API 每页最多 5 条
 MAX_CONCURRENCY = 5
 OUTPUT_XLSX = Path("outputs/minimal_case_table.xlsx")
@@ -146,16 +153,28 @@ def _case_key(hit: CaseHit) -> str:
     return str(hit.source_id or hit.case_no or hit.citation or hit.title)
 
 
-async def rewrite_query(llm: ChatOpenAI, query: str) -> str:
+async def rewrite_queries(llm: ChatOpenAI, query: str) -> list[str]:
     prompt = f"""
 你是法律检索助手。请将用户输入改写为更专业、规范的法律检索语句。
-只输出一行改写后的检索语句，不要解释，不要编号，不要引号。
+输出{REWRITE_QUERY_COUNT}条不同的改写结果，每行一条。
+不要解释，不要编号，不要引号。
 
 用户输入：{query}
     """.strip()
     msg = await llm.ainvoke(prompt)
-    rewritten = str(msg.content).strip().splitlines()[0].strip() if msg.content else ""
-    return rewritten or query
+    text = str(msg.content or "")
+    lines = [line.strip().lstrip("-").strip() for line in text.splitlines()]
+    lines = [line for line in lines if line]
+    uniq: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        if line == query or line in seen:
+            continue
+        seen.add(line)
+        uniq.append(line)
+        if len(uniq) >= REWRITE_QUERY_COUNT:
+            break
+    return uniq
 
 
 async def fetch_case_hits(case_client: Any, query: str, target_count: int) -> list[CaseHit]:
@@ -198,29 +217,20 @@ async def build_rows() -> list[list[str]]:
         llm = init_llm()
         extractor = build_llm_extractor(llm)
 
-        rewritten_query = await rewrite_query(llm, QUERY)
-        original_hits = await fetch_case_hits(case_client, QUERY, TARGET_CASE_COUNT)
-        rewritten_hits = (
-            await fetch_case_hits(case_client, rewritten_query, TARGET_CASE_COUNT)
-            if rewritten_query != QUERY
-            else []
-        )
+        rewritten_queries = await rewrite_queries(llm, QUERY)
+        all_queries = [QUERY, *rewritten_queries]
 
         merged_hits: list[CaseHit] = []
         seen: set[str] = set()
-        for i in range(max(len(original_hits), len(rewritten_hits))):
-            if i < len(original_hits):
-                key = _case_key(original_hits[i])
+        for q in all_queries:
+            hits = await fetch_case_hits(case_client, q, TARGET_CASE_COUNT)
+            for hit in hits:
+                key = _case_key(hit)
                 if key not in seen:
                     seen.add(key)
-                    merged_hits.append(original_hits[i])
-            if len(merged_hits) >= TARGET_CASE_COUNT:
-                break
-            if i < len(rewritten_hits):
-                key = _case_key(rewritten_hits[i])
-                if key not in seen:
-                    seen.add(key)
-                    merged_hits.append(rewritten_hits[i])
+                    merged_hits.append(hit)
+                if len(merged_hits) >= TARGET_CASE_COUNT:
+                    break
             if len(merged_hits) >= TARGET_CASE_COUNT:
                 break
 
