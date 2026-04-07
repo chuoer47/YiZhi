@@ -38,6 +38,7 @@ DEBUG_LLM_RAW = False
 HEADERS = [
     "审理法院",
     "案号",
+    "案由",
     "法院审理程序",
     "法院层级",
     "法院认为（精简后）",
@@ -164,6 +165,7 @@ async def process_hit(
     async with semaphore:
         court = str(hit.court_name or "")
         case_no = str(hit.case_no or hit.citation or "")
+        cause = str(hit.cause or "未明确")
         trial_procedure = infer_trial_procedure(hit, case_no)
         court_level = infer_court_level(hit, court)
         raw_case_text = str(hit.content or "")
@@ -194,6 +196,7 @@ async def process_hit(
         main_row = [
             court,
             case_no,
+            cause,
             trial_procedure,
             court_level,
             court_reasoning_short,
@@ -626,6 +629,7 @@ def _save_excel_sync(rows: list[list[str]]) -> None:
         [
             "审理法院",
             "案号",
+            "案由",
             "法院审理程序",
             "法院层级",
             "法院认为（精简后）",
@@ -637,7 +641,7 @@ def _save_excel_sync(rows: list[list[str]]) -> None:
             "法律依据（法律名称+条文）",
         ]
     )
-    ws.append(["", "", "", "", "", "", "", "权利类", "金额类", "行为类", ""])
+    ws.append(["", "", "", "", "", "", "", "", "权利类", "金额类", "行为类", ""])
 
     ws.merge_cells("A1:A2")
     ws.merge_cells("B1:B2")
@@ -646,8 +650,9 @@ def _save_excel_sync(rows: list[list[str]]) -> None:
     ws.merge_cells("E1:E2")
     ws.merge_cells("F1:F2")
     ws.merge_cells("G1:G2")
-    ws.merge_cells("H1:J1")
-    ws.merge_cells("K1:K2")
+    ws.merge_cells("H1:H2")
+    ws.merge_cells("I1:K1")
+    ws.merge_cells("L1:L2")
 
     for row in rows:
         ws.append(row)
@@ -657,11 +662,11 @@ def _save_excel_sync(rows: list[list[str]]) -> None:
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    widths = [16, 24, 14, 14, 40, 36, 30, 24, 24, 24, 42]
+    widths = [16, 24, 22, 14, 14, 40, 36, 30, 24, 24, 24, 42]
     for idx, width in enumerate(widths, start=1):
         ws.column_dimensions[chr(64 + idx)].width = width
 
-    for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=11):
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=12):
         for cell in row:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
 
