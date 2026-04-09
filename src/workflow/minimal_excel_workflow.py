@@ -83,6 +83,15 @@ class QueryRewriteResult(BaseModel):
     )
 
 
+class LawQueryRewriteResult(BaseModel):
+    法律检索查询: list[str] = Field(
+        ...,
+        min_length=REWRITE_QUERY_COUNT,
+        max_length=REWRITE_QUERY_COUNT,
+        description="用于检索法律条文的专业化短查询语句",
+    )
+
+
 class MinimalCaseRow(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -160,7 +169,7 @@ def build_law_basis(hits: list[LawHit]) -> str:
             parts.append(f"{law_name}{article_no}")
         if len(parts) >= 2:
             break
-    return "；".join(parts) if parts else "未检索到明确法律条文"
+    return "；".join(parts)
 
 
 async def rewrite_queries(rewriter: Any, query: str) -> list[str]:
@@ -245,8 +254,48 @@ async def extract_case_fields(extractor: Any, hit: CaseHit) -> CaseExtractResult
     )
 
 
+async def rewrite_law_queries(
+    law_rewriter: Any,
+    hit: CaseHit,
+    extracted: CaseExtractResult,
+) -> list[str]:
+    schema_text = json.dumps(LawQueryRewriteResult.model_json_schema(), ensure_ascii=False, indent=2)
+    result: LawQueryRewriteResult = await law_rewriter.ainvoke(
+        [
+            SystemMessage(content="你是法律条文检索助手，输出必须严格符合给定结构。"),
+            HumanMessage(
+                content=(
+                    "请将以下案件信息改写为可用于法条检索的专业查询语句。\n"
+                    "要求：每条查询是短语，不要解释，不要编号，不要口语化长句。\n"
+                    f"案件标题：{hit.title}\n"
+                    f"案由：{extracted.案由}\n"
+                    f"主要原因：{extracted.主要原因}\n"
+                    f"裁判结果：{extracted.裁判结果}\n"
+                    f"结构定义如下：\n{schema_text}"
+                )
+            ),
+        ]
+    )
+
+    rewritten = [item.strip() for item in result.法律检索查询 if item.strip()]
+    base_queries = [
+        f"{hit.title} {extracted.主要原因}".strip(),
+        extracted.案由.strip(),
+        (hit.cause or "").strip(),
+        extracted.主要原因.strip(),
+    ]
+    merged: list[str] = []
+    seen: set[str] = set()
+    for q in [*rewritten, *base_queries]:
+        if q and q not in seen:
+            seen.add(q)
+            merged.append(q)
+    return merged
+
+
 async def process_hit(
     extractor: Any,
+    law_rewriter: Any,
     law_client: DeliLegalClient,
     hit: CaseHit,
     semaphore: asyncio.Semaphore,
@@ -256,13 +305,8 @@ async def process_hit(
             raise ValueError(f"Case metadata missing court_name/case_no: {hit.title}")
 
         extracted = await extract_case_fields(extractor, hit)
+        law_queries = await rewrite_law_queries(law_rewriter, hit, extracted)
         law_basis = ""
-        law_queries = [
-            f"{hit.title} {extracted.主要原因}",
-            extracted.案由,
-            hit.cause or "",
-            extracted.主要原因,
-        ]
         for query in law_queries:
             q = query.strip()
             if not q:
@@ -276,6 +320,8 @@ async def process_hit(
             law_basis = build_law_basis(law_hits)
             if law_basis:
                 break
+        if not law_basis:
+            law_basis = "未检索到明确法律条文"
 
         return MinimalCaseRow(
             审理法院=hit.court_name.strip(),
@@ -297,6 +343,7 @@ async def build_rows() -> list[MinimalCaseRow]:
     with init_case_client() as case_client, DeliLegalClient.from_env(DOTENV_PATH) as law_client:
         llm = init_llm()
         rewriter = llm.with_structured_output(QueryRewriteResult, method="function_calling")
+        law_rewriter = llm.with_structured_output(LawQueryRewriteResult, method="function_calling")
         extractor = llm.with_structured_output(CaseExtractResult, method="function_calling")
 
         rewritten_queries = await rewrite_queries(rewriter, QUERY)
@@ -318,7 +365,7 @@ async def build_rows() -> list[MinimalCaseRow]:
                 break
 
         semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
-        tasks = [process_hit(extractor, law_client, hit, semaphore) for hit in merged_hits]
+        tasks = [process_hit(extractor, law_rewriter, law_client, hit, semaphore) for hit in merged_hits]
         return await asyncio.gather(*tasks)
 
 
