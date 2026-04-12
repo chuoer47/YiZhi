@@ -1,0 +1,13 @@
+案件标题：{case_title}
+审理法院：{court_name}
+案号：{case_no}
+案由：{cause}
+审理程序（元数据）：{level_of_trial}
+案件类型（元数据）：{case_type}
+
+裁判文书原文：
+{case_content}
+
+请基于以上内容提取结果。
+结构定义如下：
+{schema_text}
