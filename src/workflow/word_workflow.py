@@ -104,7 +104,6 @@ class WordReportContent(BaseModel):
     第一部分_本案关联性: str = Field(..., min_length=1)
     第二部分_类案核心裁判要旨: str = Field(..., min_length=1)
     第二部分_观点总结列表: list[str] = Field(..., min_length=1)
-    第三部分_关联性与最终结论: str = Field(..., min_length=1)
     第四部分_相关法律法规原文: list[str] = Field(..., min_length=1)
     第五部分_结果分析: list[str] = Field(..., min_length=3, max_length=3)
     应当参照类案: list[str] = Field(..., min_length=1)
@@ -548,12 +547,10 @@ async def save_word(
         add_body_paragraph(report_content.第二部分_类案核心裁判要旨)
         for idx, view in enumerate(report_content.第二部分_观点总结列表, start=1):
             add_body_field_value(f"【观点{idx}】", view)
-        add_section_heading("三、【类案与本案关联性及最终结论】")
-        add_body_paragraph(report_content.第三部分_关联性与最终结论)
-        add_section_heading("四、【相关法律法规原文：法律、司法解释】")
+        add_section_heading("三、【相关法律法规原文：法律、司法解释】")
         for idx, law_text in enumerate(report_content.第四部分_相关法律法规原文, start=1):
             add_body_paragraph(f"{idx}、{law_text}")
-        add_section_heading("五、【类案检索结果分析】")
+        add_section_heading("四、【类案检索结果分析】")
         for idx, item in enumerate(report_content.第五部分_结果分析, start=1):
             add_body_paragraph(f"{idx}、{item}")
         add_body_field_label("应当参照类案：")
@@ -564,7 +561,7 @@ async def save_word(
             add_body_paragraph(f"{idx}、{item}")
 
         doc.add_page_break()
-        add_section_heading("六、【附件：类案检索原文】")
+        add_section_heading("五、【附件：类案检索原文】")
         add_attachment_paragraph("案例原文：")
         for idx, hit in enumerate(attachment_case_hits, start=1):
             if idx > 1:
