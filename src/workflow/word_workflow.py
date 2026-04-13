@@ -16,6 +16,7 @@ from docx.shared import Cm, Pt, RGBColor
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
 
+from case_table_adapter import CaseTableRow, build_case_table_rows_for_viewpoint
 from excel_workflow import QUERY, MinimalCaseRow, build_rows, init_llm, load_env
 from prompt_loader import render_prompt
 
@@ -349,6 +350,7 @@ async def select_attachment_cases(query: str, rows: list[MinimalCaseRow], case_h
 
 async def save_word(
     case_title: str,
+    rows: list[MinimalCaseRow],
     attachment_case_hits: list[CaseHit],
     report_content: WordReportContent,
     report_title: str = "案涉争议问题检索报告",
@@ -357,6 +359,8 @@ async def save_word(
 ) -> Path:
     if not case_title:
         raise ValueError("case_title must not be empty.")
+    if not rows:
+        raise ValueError("rows must not be empty.")
 
     def _build_and_save() -> Path:
         date_text = report_date or datetime.now().strftime("%Y年%m月")
@@ -445,6 +449,35 @@ async def save_word(
             run.font.size = Pt(15)
             run.font.bold = True
             run.font.color.rgb = label_color
+
+        def add_case_table(rows_data: list[CaseTableRow]) -> None:
+            table = doc.add_table(rows=len(rows_data) + 1, cols=3)
+            table.style = "Table Grid"
+
+            headers = ["中级人民法院案例", "案由", "裁判要点与理由"]
+            for col_idx, header in enumerate(headers):
+                cell = table.cell(0, col_idx)
+                p = cell.paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = p.add_run(header)
+                run.font.name = "仿宋"
+                run._element.rPr.rFonts.set(qn("w:eastAsia"), "仿宋")
+                run.font.size = Pt(12)
+                run.font.bold = True
+
+            for row_idx, row_data in enumerate(rows_data, start=1):
+                values = [row_data.中级人民法院案例, row_data.案由, row_data.裁判要点与理由]
+                for col_idx, value in enumerate(values):
+                    cell = table.cell(row_idx, col_idx)
+                    p = cell.paragraphs[0]
+                    if col_idx < 2:
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    else:
+                        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                    run = p.add_run(value)
+                    run.font.name = "仿宋"
+                    run._element.rPr.rFonts.set(qn("w:eastAsia"), "仿宋")
+                    run.font.size = Pt(12)
 
         def clean_attachment_text(text: str) -> str:
             cleaned_text = html.unescape(text)
@@ -547,6 +580,8 @@ async def save_word(
         add_body_paragraph(report_content.第二部分_类案核心裁判要旨)
         for idx, view in enumerate(report_content.第二部分_观点总结列表, start=1):
             add_body_field_value(f"【观点{idx}】", view)
+            viewpoint_table_rows = build_case_table_rows_for_viewpoint(rows, view, max_cases=3)
+            add_case_table(viewpoint_table_rows)
         add_section_heading("三、【相关法律法规原文：法律、司法解释】")
         for idx, law_text in enumerate(report_content.第四部分_相关法律法规原文, start=1):
             add_body_paragraph(f"{idx}、{law_text}")
@@ -588,6 +623,7 @@ async def main() -> None:
     attachment_case_hits = await select_attachment_cases(QUERY, rows, case_hits)
     word_report_path = await save_word(
         case_title=QUERY,
+        rows=rows,
         attachment_case_hits=attachment_case_hits,
         report_content=report_content,
     )
