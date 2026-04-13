@@ -8,5 +8,5 @@ dist/
 *.egg-info/
 .vscode
 .idea
-outputs/*.xlsx
-outputs/*.docx
+outputs/*
+!outputs/.gitkeep

@@ -17,6 +17,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
 
 from case_table_adapter import CaseTableRow, build_case_table_rows_for_viewpoint
+from evidence_baseline_workflow import build_evidence_baseline
 from excel_workflow import QUERY, MinimalCaseRow, build_rows, init_llm, load_env
 from prompt_loader import render_prompt
 
@@ -279,6 +280,8 @@ async def generate_word_report_content(query: str, rows: list[MinimalCaseRow]) -
     writer = llm.with_structured_output(WordReportContent, method="function_calling")
     schema_text = json.dumps(WordReportContent.model_json_schema(), ensure_ascii=False, indent=2)
     rows_text = json.dumps([row.model_dump(by_alias=True) for row in rows], ensure_ascii=False, indent=2)
+    evidence_baseline = build_evidence_baseline(query, rows)
+    evidence_baseline_text = json.dumps(evidence_baseline.model_dump(), ensure_ascii=False, indent=2)
     return await writer.ainvoke(
         [
             SystemMessage(content=render_prompt("word/writer_system.txt")),
@@ -287,6 +290,7 @@ async def generate_word_report_content(query: str, rows: list[MinimalCaseRow]) -
                     "word/report_human.txt",
                     query=query,
                     rows_text=rows_text,
+                    evidence_baseline_text=evidence_baseline_text,
                     schema_text=schema_text,
                 )
             ),
