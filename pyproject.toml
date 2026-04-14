@@ -9,6 +9,7 @@ description = "LangChain-ready wrappers for DeliLegal law and case search APIs."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "fastapi>=0.115.0",
   "httpx>=0.28.0",
   "langchain-core>=1.2.0",
   "langchain-openai>=0.3.0",
@@ -16,6 +17,7 @@ dependencies = [
   "python-docx>=1.1.0",
   "pydantic>=2.8.0",
   "python-dotenv>=1.0.0",
+  "uvicorn>=0.32.0",
 ]
 
 [tool.setuptools]

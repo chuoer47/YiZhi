@@ -8,7 +8,10 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from excel_workflow import QUERY, MinimalCaseRow, build_rows, load_env
+if __package__:
+    from .excel_workflow import QUERY, MinimalCaseRow, build_rows, load_env
+else:
+    from excel_workflow import QUERY, MinimalCaseRow, build_rows, load_env
 
 
 TOP_K = 12

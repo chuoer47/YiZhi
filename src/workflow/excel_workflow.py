@@ -22,7 +22,10 @@ from langchain_openai import ChatOpenAI
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from pydantic import BaseModel, ConfigDict, Field
-from prompt_loader import render_prompt
+if __package__:
+    from .prompt_loader import render_prompt
+else:
+    from prompt_loader import render_prompt
 
 
 QUERY = "上班途中车祸工伤案例"
@@ -307,29 +310,37 @@ async def process_hit(
         )
 
 
-async def build_rows() -> tuple[list[MinimalCaseRow], list[CaseHit]]:
+async def build_rows(
+    query: str = QUERY,
+    target_case_count: int = TARGET_CASE_COUNT,
+) -> tuple[list[MinimalCaseRow], list[CaseHit]]:
+    if not query.strip():
+        raise ValueError("query must not be empty.")
+    if target_case_count <= 0:
+        raise ValueError("target_case_count must be greater than 0.")
+
     with init_case_client() as case_client, DeliLegalClient.from_env(DOTENV_PATH) as law_client:
         llm = init_llm()
         rewriter = llm.with_structured_output(QueryRewriteResult, method="function_calling")
         law_rewriter = llm.with_structured_output(LawQueryRewriteResult, method="function_calling")
         extractor = llm.with_structured_output(CaseExtractResult, method="function_calling")
 
-        rewritten_queries = await rewrite_queries(rewriter, QUERY)
-        all_queries = [QUERY, *rewritten_queries]
+        rewritten_queries = await rewrite_queries(rewriter, query)
+        all_queries = [query, *rewritten_queries]
 
         merged_hits: list[CaseHit] = []
         seen: set[str] = set()
-        for query in all_queries:
-            hits = await fetch_case_hits(case_client, query, TARGET_CASE_COUNT)
+        for search_query in all_queries:
+            hits = await fetch_case_hits(case_client, search_query, target_case_count)
             for hit in hits:
                 key = build_case_dedup_key(hit)
                 if key in seen:
                     continue
                 seen.add(key)
                 merged_hits.append(hit)
-                if len(merged_hits) >= TARGET_CASE_COUNT:
+                if len(merged_hits) >= target_case_count:
                     break
-            if len(merged_hits) >= TARGET_CASE_COUNT:
+            if len(merged_hits) >= target_case_count:
                 break
 
         semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
@@ -367,10 +378,18 @@ async def save_excel(rows: list[MinimalCaseRow]) -> Path:
     return await asyncio.to_thread(save_excel_sync, rows)
 
 
-async def main() -> None:
+async def run_excel_workflow(
+    query: str = QUERY,
+    target_case_count: int = TARGET_CASE_COUNT,
+) -> tuple[Path, list[MinimalCaseRow], list[CaseHit]]:
     load_env()
-    rows, _ = await build_rows()
+    rows, case_hits = await build_rows(query=query, target_case_count=target_case_count)
     excel_path = await save_excel(rows)
+    return excel_path, rows, case_hits
+
+
+async def main() -> None:
+    excel_path, rows, _ = await run_excel_workflow()
     print(f"Generated Excel: {excel_path.resolve()}")
     print(f"Rows: {len(rows)}")
     print("Columns:", " | ".join(HEADERS))

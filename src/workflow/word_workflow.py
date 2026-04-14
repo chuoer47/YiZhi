@@ -16,10 +16,16 @@ from docx.shared import Cm, Pt, RGBColor
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from case_table_adapter import CaseTableRow, build_case_table_rows_for_viewpoint
-from evidence_baseline_workflow import build_evidence_baseline
-from excel_workflow import QUERY, MinimalCaseRow, build_rows, init_llm, load_env
-from prompt_loader import render_prompt
+if __package__:
+    from .case_table_adapter import CaseTableRow, build_case_table_rows_for_viewpoint
+    from .evidence_baseline_workflow import build_evidence_baseline
+    from .excel_workflow import QUERY, MinimalCaseRow, build_rows, init_llm, load_env
+    from .prompt_loader import render_prompt
+else:
+    from case_table_adapter import CaseTableRow, build_case_table_rows_for_viewpoint
+    from evidence_baseline_workflow import build_evidence_baseline
+    from excel_workflow import QUERY, MinimalCaseRow, build_rows, init_llm, load_env
+    from prompt_loader import render_prompt
 
 WORD_SUBMITTER = "xxxxxx"
 
@@ -100,7 +106,10 @@ class WordReportContent(BaseModel):
     报告标题: str = Field(..., min_length=1)
     开篇亮明观点: str = Field(..., min_length=1)
     待决案件案情简述: str = Field(..., min_length=1)
-    第一部分正文: str = Field(..., min_length=1)
+    第一部分_类案基本事实概括: str = Field(..., min_length=1)
+    第一部分_检索方法: str = Field(..., min_length=1)
+    第一部分_检索情况: str = Field(..., min_length=1)
+    第一部分_本案关联性: str = Field(..., min_length=1)
     第二部分_类案核心裁判要旨: str = Field(..., min_length=1)
     第二部分_观点总结列表: list[str] = Field(..., min_length=1)
     第四部分_相关法律法规原文: list[str] = Field(..., min_length=1)
@@ -573,7 +582,10 @@ async def save_word(
         add_section_heading("【待决案件案情简述】")
         add_body_paragraph(report_content.待决案件案情简述)
         add_section_heading("一、【类案基本事实概括】")
-        add_body_paragraph(report_content.第一部分正文)
+        add_body_paragraph(report_content.第一部分_类案基本事实概括)
+        add_body_paragraph(report_content.第一部分_检索方法)
+        add_body_paragraph(report_content.第一部分_检索情况)
+        add_body_paragraph(report_content.第一部分_本案关联性)
         add_section_heading("二、【类案核心裁判要旨】")
         add_body_paragraph(report_content.第二部分_类案核心裁判要旨)
         for idx, view in enumerate(report_content.第二部分_观点总结列表, start=1):
@@ -601,7 +613,7 @@ async def save_word(
                 doc.add_page_break()
             add_attachment_title(f"{hit.title}")
             add_attachment_field("审理法院：", f" {hit.court_name or ''}")
-            add_attachment_field("（案号）", f"{hit.case_no or ''}", right_aligned=True)
+            add_attachment_field("（案号）", f"{hit.case_no or ''}")
             add_attachment_field("案由：", f" {hit.cause or ''}")
             add_attachment_field("裁判日期：", f" {hit.case_date or ''}")
             add_attachment_paragraph(hit.content)
@@ -615,19 +627,35 @@ async def save_word(
 
 
 async def main() -> None:
-    load_env()
-    rows, case_hits = await build_rows()
-    report_content = await generate_word_report_content(QUERY, rows)
-    attachment_case_hits = await select_attachment_cases(QUERY, rows, case_hits)
-    word_report_path = await save_word(
-        case_title=QUERY,
-        rows=rows,
-        attachment_case_hits=attachment_case_hits,
-        report_content=report_content,
-    )
+    word_report_path, rows, attachment_case_hits = await run_word_workflow()
     print(f"Generated Word Report: {word_report_path.resolve()}")
     print(f"Rows: {len(rows)}")
     print(f"Attachment Cases: {len(attachment_case_hits)}")
+
+
+async def run_word_workflow(
+    query: str = QUERY,
+    submitter: str = WORD_SUBMITTER,
+    report_title: str = "案涉争议问题检索报告",
+    report_date: str | None = None,
+) -> tuple[Path, list[MinimalCaseRow], list[CaseHit]]:
+    if not query.strip():
+        raise ValueError("query must not be empty.")
+
+    load_env()
+    rows, case_hits = await build_rows(query=query)
+    report_content = await generate_word_report_content(query, rows)
+    attachment_case_hits = await select_attachment_cases(query, rows, case_hits)
+    word_report_path = await save_word(
+        case_title=query,
+        rows=rows,
+        attachment_case_hits=attachment_case_hits,
+        report_content=report_content,
+        report_title=report_title,
+        submitter=submitter,
+        report_date=report_date,
+    )
+    return word_report_path, rows, attachment_case_hits
 
 
 if __name__ == "__main__":
