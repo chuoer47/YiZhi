@@ -577,9 +577,9 @@ async def save_word(
         add_body_paragraph(report_content.待决案件案情简述)
         add_section_heading("一、【类案基本事实概括】")
         add_body_paragraph(report_content.第一部分_类案基本事实概括)
-        add_body_field_value("【写明检索方法：包括检索平台、检索关键词、检索法院、检索时间】", report_content.第一部分_检索方法)
-        add_body_field_value("【总结类案检索情况】", report_content.第一部分_检索情况)
-        add_body_field_value("【要提及类案与本案直接的关联性】", report_content.第一部分_本案关联性)
+        add_body_paragraph(report_content.第一部分_检索方法)
+        add_body_paragraph(report_content.第一部分_检索情况)
+        add_body_paragraph(report_content.第一部分_本案关联性)
         add_section_heading("二、【类案核心裁判要旨】")
         add_body_paragraph(report_content.第二部分_类案核心裁判要旨)
         for idx, view in enumerate(report_content.第二部分_观点总结列表, start=1):
