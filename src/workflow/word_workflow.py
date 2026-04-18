@@ -10,27 +10,8 @@ if __package__:
     from .excel_models import MinimalCaseRow
     from .word_export import save_word
     from .word_generation import (
-        generate_opening_content,
-        generate_section_five_content,
-        generate_section_four_content,
-        generate_section_one_content,
-        generate_section_three_content,
-        generate_section_two_content,
         generate_word_report_content,
         select_attachment_cases,
-    )
-    from .word_models import (
-        AttachmentCaseSelection,
-        OpeningContent,
-        SectionFiveContent,
-        SectionFourContent,
-        SectionFourLawItem,
-        SectionOneContent,
-        SectionThreeContent,
-        SectionThreeTableRow,
-        SectionThreeViewpoint,
-        SectionTwoContent,
-        WordReportContent,
     )
     from .workflow_config import QUERY, WORD_SUBMITTER
     from .workflow_runtime import load_env
@@ -39,27 +20,8 @@ else:
     from excel_models import MinimalCaseRow
     from word_export import save_word
     from word_generation import (
-        generate_opening_content,
-        generate_section_five_content,
-        generate_section_four_content,
-        generate_section_one_content,
-        generate_section_three_content,
-        generate_section_two_content,
         generate_word_report_content,
         select_attachment_cases,
-    )
-    from word_models import (
-        AttachmentCaseSelection,
-        OpeningContent,
-        SectionFiveContent,
-        SectionFourContent,
-        SectionFourLawItem,
-        SectionOneContent,
-        SectionThreeContent,
-        SectionThreeTableRow,
-        SectionThreeViewpoint,
-        SectionTwoContent,
-        WordReportContent,
     )
     from workflow_config import QUERY, WORD_SUBMITTER
     from workflow_runtime import load_env

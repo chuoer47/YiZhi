@@ -13,11 +13,6 @@ if __package__:
     from .word_models import (
         AttachmentCaseSelection,
         OpeningContent,
-        SectionFiveContent,
-        SectionFourContent,
-        SectionOneContent,
-        SectionThreeContent,
-        SectionTwoContent,
         WordReportContent,
     )
     from .workflow_runtime import init_llm
@@ -28,11 +23,6 @@ else:
     from word_models import (
         AttachmentCaseSelection,
         OpeningContent,
-        SectionFiveContent,
-        SectionFourContent,
-        SectionOneContent,
-        SectionThreeContent,
-        SectionTwoContent,
         WordReportContent,
     )
     from workflow_runtime import init_llm
@@ -54,153 +44,6 @@ async def generate_opening_content(query: str, rows: list[MinimalCaseRow]) -> Op
                 content=render_prompt(
                     "word/opening_human.txt",
                     query=query,
-                    rows_text=rows_text,
-                    schema_text=schema_text,
-                )
-            ),
-        ]
-    )
-
-
-async def generate_section_one_content(
-    query: str,
-    opening: OpeningContent,
-    rows: list[MinimalCaseRow],
-) -> SectionOneContent:
-    if not query:
-        raise ValueError("QUERY must not be empty.")
-    if not rows:
-        raise ValueError("rows must not be empty.")
-    llm = init_llm()
-    section_writer = llm.with_structured_output(SectionOneContent, method="function_calling")
-    schema_text = json.dumps(SectionOneContent.model_json_schema(), ensure_ascii=False, indent=2)
-    rows_text = json.dumps([row.model_dump(by_alias=True) for row in rows[:12]], ensure_ascii=False, indent=2)
-    return await section_writer.ainvoke(
-        [
-            SystemMessage(content=render_prompt("word/writer_system.txt")),
-            HumanMessage(
-                content=render_prompt(
-                    "word/section_one_human.txt",
-                    query=query,
-                    opening_viewpoint=opening.开篇亮明观点,
-                    rows_text=rows_text,
-                    schema_text=schema_text,
-                )
-            ),
-        ]
-    )
-
-
-async def generate_section_two_content(
-    query: str,
-    section_one: SectionOneContent,
-    rows: list[MinimalCaseRow],
-) -> SectionTwoContent:
-    if not query:
-        raise ValueError("QUERY must not be empty.")
-    if not rows:
-        raise ValueError("rows must not be empty.")
-    llm = init_llm()
-    section_writer = llm.with_structured_output(SectionTwoContent, method="function_calling")
-    schema_text = json.dumps(SectionTwoContent.model_json_schema(), ensure_ascii=False, indent=2)
-    rows_text = json.dumps([row.model_dump(by_alias=True) for row in rows], ensure_ascii=False, indent=2)
-    return await section_writer.ainvoke(
-        [
-            SystemMessage(content=render_prompt("word/writer_system.txt")),
-            HumanMessage(
-                content=render_prompt(
-                    "word/section_two_human.txt",
-                    query=query,
-                    section_one_body=section_one.第一部分正文,
-                    rows_text=rows_text,
-                    schema_text=schema_text,
-                )
-            ),
-        ]
-    )
-
-
-async def generate_section_three_content(
-    query: str,
-    section_two: SectionTwoContent,
-    rows: list[MinimalCaseRow],
-) -> SectionThreeContent:
-    if not query:
-        raise ValueError("QUERY must not be empty.")
-    if not rows:
-        raise ValueError("rows must not be empty.")
-    llm = init_llm()
-    section_writer = llm.with_structured_output(SectionThreeContent, method="function_calling")
-    schema_text = json.dumps(SectionThreeContent.model_json_schema(), ensure_ascii=False, indent=2)
-    rows_text = json.dumps([row.model_dump(by_alias=True) for row in rows], ensure_ascii=False, indent=2)
-    return await section_writer.ainvoke(
-        [
-            SystemMessage(content=render_prompt("word/writer_system.txt")),
-            HumanMessage(
-                content=render_prompt(
-                    "word/section_three_human.txt",
-                    query=query,
-                    section_two_summary=section_two.类案检索情况段,
-                    rows_text=rows_text,
-                    schema_text=schema_text,
-                )
-            ),
-        ]
-    )
-
-
-async def generate_section_four_content(
-    query: str,
-    section_three: SectionThreeContent,
-    rows: list[MinimalCaseRow],
-) -> SectionFourContent:
-    if not query:
-        raise ValueError("QUERY must not be empty.")
-    if not rows:
-        raise ValueError("rows must not be empty.")
-    llm = init_llm()
-    section_writer = llm.with_structured_output(SectionFourContent, method="function_calling")
-    schema_text = json.dumps(SectionFourContent.model_json_schema(), ensure_ascii=False, indent=2)
-    rows_text = json.dumps([row.model_dump(by_alias=True) for row in rows], ensure_ascii=False, indent=2)
-    return await section_writer.ainvoke(
-        [
-            SystemMessage(content=render_prompt("word/writer_system.txt")),
-            HumanMessage(
-                content=render_prompt(
-                    "word/section_four_human.txt",
-                    query=query,
-                    section_three_intro=section_three.第三部分引言段,
-                    rows_text=rows_text,
-                    schema_text=schema_text,
-                )
-            ),
-        ]
-    )
-
-
-async def generate_section_five_content(
-    query: str,
-    section_three: SectionThreeContent,
-    section_four: SectionFourContent,
-    rows: list[MinimalCaseRow],
-) -> SectionFiveContent:
-    if not query:
-        raise ValueError("QUERY must not be empty.")
-    if not rows:
-        raise ValueError("rows must not be empty.")
-    llm = init_llm()
-    section_writer = llm.with_structured_output(SectionFiveContent, method="function_calling")
-    schema_text = json.dumps(SectionFiveContent.model_json_schema(), ensure_ascii=False, indent=2)
-    rows_text = json.dumps([row.model_dump(by_alias=True) for row in rows], ensure_ascii=False, indent=2)
-    return await section_writer.ainvoke(
-        [
-            SystemMessage(content=render_prompt("word/writer_system.txt")),
-            HumanMessage(
-                content=render_prompt(
-                    "word/section_five_human.txt",
-                    query=query,
-                    section_three_intro=section_three.第三部分引言段,
-                    section_four_intro=section_four.第四部分引言段,
                     rows_text=rows_text,
                     schema_text=schema_text,
                 )
