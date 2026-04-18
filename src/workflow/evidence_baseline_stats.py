@@ -27,37 +27,6 @@ def build_distribution(rows: list[Any], field_name: str) -> dict[str, int]:
     return dict(counter.most_common())
 
 
-def build_viewpoint_stats(
-    rows: list[Any],
-    field_name: str,
-    total: int,
-) -> list[EvidenceStat]:
-    cases_by_viewpoint: dict[str, set[str]] = defaultdict(set)
-    for row in rows:
-        viewpoint = normalize_value(getattr(row, field_name))
-        case_no = normalize_value(row.案号)
-        if not viewpoint or viewpoint in UNKNOWN_VALUES:
-            continue
-        if not case_no:
-            continue
-        cases_by_viewpoint[viewpoint].add(case_no)
-
-    stats: list[EvidenceStat] = []
-    for viewpoint, case_nos in cases_by_viewpoint.items():
-        count = len(case_nos)
-        ratio = round((count / total) * 100, 1) if total else 0.0
-        stats.append(
-            EvidenceStat(
-                观点=viewpoint,
-                支持数量=count,
-                支持占比=ratio,
-                案号列表=sorted(case_nos),
-            )
-        )
-    stats.sort(key=lambda item: item.支持数量, reverse=True)
-    return stats[:TOP_K]
-
-
 def build_law_basis_stats(rows: list[Any], total: int) -> list[EvidenceStat]:
     cases_by_law_basis: dict[str, set[str]] = defaultdict(set)
     for row in rows:

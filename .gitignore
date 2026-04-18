@@ -10,6 +10,4 @@ dist/
 .idea
 outputs/*
 !outputs/.gitkeep
-outputs/*.xlsx
-outputs/*.docx
-src/workflow/outputs
+src/workflow/outputs/*
