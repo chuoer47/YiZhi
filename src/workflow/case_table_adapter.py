@@ -5,9 +5,9 @@ import re
 from pydantic import BaseModel, ConfigDict, Field
 
 if __package__:
-    from .excel_workflow import MinimalCaseRow
+    from .excel_models import MinimalCaseRow
 else:
-    from excel_workflow import MinimalCaseRow
+    from excel_models import MinimalCaseRow
 
 
 class CaseTableRow(BaseModel):
