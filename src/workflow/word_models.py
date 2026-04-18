@@ -29,6 +29,6 @@ class WordReportContent(BaseModel):
     第二部分_类案核心裁判要旨: str = Field(..., min_length=1)
     第二部分_观点总结列表: list[str] = Field(..., min_length=1)
     第四部分_相关法律法规原文: list[str] = Field(..., min_length=1)
-    第五部分_结果分析: list[str] = Field(..., min_length=3, max_length=3)
+    第五部分_结果分析: list[str] = Field(..., min_length=5, max_length=5)
     应当参照类案: list[str] = Field(..., min_length=1)
     可以参考类案: list[str] = Field(..., min_length=1)
